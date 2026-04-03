@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Planteki - Login</title>
+  <link rel="stylesheet" href="styles.css" />
+  <meta name="theme-color" content="#2E7D32" />
+</head>
+<body>
+
+<header>
+  <h2>Login</h2>
+</header>
+
+<main>
+  <div class="card" id="loginCard">
+    <h3>Login</h3>
+    <input type="text" id="loginUsername" placeholder="Username" />
+    <input type="password" id="loginPassword" placeholder="Password" />
+    <button onclick="login()" style="display:block; width:70%; margin:10px auto 0 auto;">Login</button>
+    <p id="loginMessage" style="color:red;"></p>
+    <p style="margin-top:10px;">
+      New here? <button onclick="showSignup()" style="background:none;color:#2E7D32;border:none;cursor:pointer;font-weight:bold;">Sign Up</button>
+    </p>
+  </div>
+
+  <div class="card" id="signupCard" style="display:none;">
+    <h3>Signup</h3>
+    <input type="text" id="signupUsername" placeholder="Username" />
+    <input type="password" id="signupPassword" placeholder="Password" />
+    <button onclick="signup()">Sign Up</button>
+    <p id="signupMessage" style="color:green;"></p>
+    <p style="margin-top:10px;">
+      Already have an account? <button onclick="showLogin()" style="background:none;color:#2E7D32;border:none;cursor:pointer;font-weight:bold;">Login</button>
+    </p>
+  </div>
+</main>
+
+<script>
+  const loginCard = document.getElementById("loginCard");
+  const signupCard = document.getElementById("signupCard");
+
+  function showSignup() {
+    loginCard.style.display = "none";
+    signupCard.style.display = "block";
+  }
+
+  function showLogin() {
+    signupCard.style.display = "none";
+    loginCard.style.display = "block";
+  }
+
+  function login() {
+    const user = document.getElementById("loginUsername").value.trim();
+    const pass = document.getElementById("loginPassword").value.trim();
+    const stored = JSON.parse(localStorage.getItem("plantekiUser"));
+
+    if(!user || !pass) { document.getElementById("loginMessage").textContent="Enter username and password"; return; }
+    if(!stored) { document.getElementById("loginMessage").textContent="No account found. Please sign up."; return; }
+
+    if(user === stored.user && pass === stored.pass) {
+      alert("Login successful!");
+      window.location.href = "index.html";
+    } else {
+      document.getElementById("loginMessage").textContent="Invalid credentials";
+    }
+  }
+
+  function signup() {
+    const user = document.getElementById("signupUsername").value.trim();
+    const pass = document.getElementById("signupPassword").value.trim();
+
+    if(!user || !pass) { document.getElementById("signupMessage").textContent="Enter username and password"; return; }
+
+    localStorage.setItem("plantekiUser", JSON.stringify({user,pass}));
+    alert("Signup successful!");
+    window.location.href = "index.html";
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Planteki - Plant Wiki</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#2E7D32" />
+</head>
+<body>
+
+<header>
+  <h2>Plant Wiki</h2>
+</header>
+
+<main>
+  <div class="card">
+    <h3>🌿 Snake Plant</h3>
+    <p><strong>Scientific Name:</strong> Sansevieria trifasciata</p>
+    <p><strong>Water:</strong> Every 2-3 weeks</p>
+    <p><strong>Light:</strong> Low to bright indirect light</p>
+  </div>
+  <div class="card">
+    <h3>🌼 Peace Lily</h3>
+    <p><strong>Scientific Name:</strong> Spathiphyllum</p>
+    <p><strong>Water:</strong> Keep soil moist</p>
+    <p><strong>Light:</strong> Indirect sunlight</p>
+  </div>
+  <div class="card">
+    <h3>🌱 Aloe Vera</h3>
+    <p><strong>Scientific Name:</strong> Aloe barbadensis miller</p>
+    <p><strong>Water:</strong> When soil is dry</p>
+    <p><strong>Light:</strong> Bright sunlight</p>
+  </div>
+</main>
+
+<nav class="bottom-nav">
+  <button onclick="window.location.href='index.html'">🌿 Plants</button>
+  <button class="active-tab">📚 Plant Wiki</button>
+</nav>
+
+<script>
+  if('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('service-worker.js').then(()=>console.log('Service Worker Registered'));
+  }
+</script>
+</body>
+</html>
