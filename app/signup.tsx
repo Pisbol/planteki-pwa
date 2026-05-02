@@ -17,7 +17,11 @@ export default function SigninScreen() {
       return;
     }
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        email,
+        password,
+      );
       const user = userCredential.user;
 
       // Save user info in context
@@ -41,6 +45,7 @@ export default function SigninScreen() {
         style={styles.input}
         autoCapitalize="none"
         keyboardType="email-address"
+        placeholderTextColor="#666"
       />
       <TextInput
         placeholder="Password"
@@ -48,6 +53,7 @@ export default function SigninScreen() {
         onChangeText={setPassword}
         secureTextEntry
         style={styles.input}
+        placeholderTextColor="#666"
       />
 
       <Pressable onPress={() => router.push("/forgotPass")}>
@@ -58,7 +64,10 @@ export default function SigninScreen() {
         <Text style={styles.buttonText}>Sign In</Text>
       </Pressable>
 
-      <Pressable onPress={() => router.back()} style={[styles.button, styles.backButton]}>
+      <Pressable
+        onPress={() => router.back()}
+        style={[styles.button, styles.backButton]}
+      >
         <Text style={styles.buttonText}>Go back</Text>
       </Pressable>
     </View>
@@ -66,10 +75,32 @@ export default function SigninScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#378837" },
+  container: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#378837",
+  },
   title: { fontSize: 24, color: "#fff", fontWeight: "bold", marginBottom: 20 },
-  input: { width: 250, height: 45, backgroundColor: "white", borderRadius: 8, borderWidth: 1, borderColor: "#ffffff", paddingHorizontal: 10, marginBottom: 15 },
-  button: { width: 250, height: 45, backgroundColor: "#266e26", justifyContent: "center", alignItems: "center", borderRadius: 8, marginTop: 10 },
+  input: {
+    width: 250,
+    height: 45,
+    backgroundColor: "white",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ffffff",
+    paddingHorizontal: 10,
+    marginBottom: 15,
+  },
+  button: {
+    width: 250,
+    height: 45,
+    backgroundColor: "#266e26",
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 8,
+    marginTop: 10,
+  },
   backButton: { backgroundColor: "#266e26" },
   buttonText: { color: "white", fontWeight: "bold" },
   link: { color: "#fff", marginBottom: 4, textDecorationLine: "underline" },

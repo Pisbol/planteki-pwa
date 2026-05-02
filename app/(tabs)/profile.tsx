@@ -1,7 +1,14 @@
-import { useContext, useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, Image } from "react-native";
-import { UserContext } from "../UserContext";
 import { useRouter } from "expo-router";
+import { useContext, useState } from "react";
+import {
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { UserContext } from "../UserContext";
 
 export default function ProfileScreen() {
   const { user, setUser } = useContext(UserContext);
@@ -52,6 +59,7 @@ export default function ProfileScreen() {
             placeholder="Tell us about yourself..."
             multiline
             style={[styles.input, styles.bioInput]}
+            placeholderTextColor="#666"
           />
         ) : (
           <Text style={styles.info}>{bio || "No bio yet"}</Text>
@@ -79,7 +87,10 @@ export default function ProfileScreen() {
         )}
 
         {/* Logout button */}
-        <Pressable onPress={handleLogout} style={[styles.button, { backgroundColor: "#b22222" }]}>
+        <Pressable
+          onPress={handleLogout}
+          style={[styles.button, { backgroundColor: "#b22222" }]}
+        >
           <Text style={styles.buttonText}>Logout</Text>
         </Pressable>
       </View>

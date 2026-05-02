@@ -1,0 +1,1117 @@
+import React, { useCallback, useState } from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface SearchResult {
+  title: string;
+  snippet: string;
+  pageid: number;
+}
+
+interface InfoBox {
+  kingdom?: string;
+  species?: string;
+  genus?: string;
+  family?: string;
+  order?: string;
+  class?: string;
+  phylum?: string;
+  origin?: string;
+  climate?: string;
+  type?: string;
+  habitat?: string;
+  height?: string;
+  lifespan?: string;
+  bloom?: string;
+  toxicity?: string;
+  [key: string]: string | undefined;
+}
+
+interface PlantDetail {
+  title: string;
+  extract: string;
+  thumbnail?: { source: string };
+  infobox: InfoBox;
+}
+
+// ─── Filter categories ────────────────────────────────────────────────────────
+const FILTERS = [
+  { id: "all", label: "🌿 All" },
+  { id: "tree", label: "🌳 Trees" },
+  { id: "flower", label: "🌸 Flowers" },
+  { id: "herb", label: "🌱 Herbs" },
+  { id: "succulent", label: "🌵 Succulents" },
+  { id: "tropical", label: "🌴 Tropical" },
+  { id: "aquatic", label: "💧 Aquatic" },
+];
+
+const FILTER_KEYWORDS: Record<string, string[]> = {
+  tree: [
+    "tree",
+    "oak",
+    "pine",
+    "maple",
+    "birch",
+    "cedar",
+    "palm",
+    "willow",
+    "eucalyptus",
+    "cherry",
+    "apple",
+  ],
+  flower: [
+    "flower",
+    "rose",
+    "daisy",
+    "lily",
+    "tulip",
+    "orchid",
+    "sunflower",
+    "lavender",
+    "hibiscus",
+    "blossom",
+  ],
+  herb: [
+    "herb",
+    "mint",
+    "basil",
+    "oregano",
+    "thyme",
+    "rosemary",
+    "parsley",
+    "sage",
+    "cilantro",
+    "chamomile",
+  ],
+  succulent: [
+    "succulent",
+    "cactus",
+    "aloe",
+    "agave",
+    "echeveria",
+    "sedum",
+    "jade",
+    "stonecrop",
+    "haworthia",
+  ],
+  tropical: [
+    "tropical",
+    "monstera",
+    "fern",
+    "banana",
+    "mango",
+    "bamboo",
+    "philodendron",
+    "bromeliad",
+  ],
+  aquatic: [
+    "aquatic",
+    "water",
+    "lotus",
+    "lily pad",
+    "duckweed",
+    "cattail",
+    "reed",
+    "mangrove",
+    "kelp",
+  ],
+};
+
+// ─── Wikipedia API helpers ────────────────────────────────────────────────────
+const WP_BASE = "https://en.wikipedia.org/w/api.php";
+const WP_REST = "https://en.wikipedia.org/api/rest_v1/page/summary/";
+
+// Keywords that strongly indicate a Wikipedia article is about a plant
+const PLANT_SNIPPET_KEYWORDS = [
+  "plant",
+  "flower",
+  "tree",
+  "shrub",
+  "herb",
+  "grass",
+  "fern",
+  "moss",
+  "species",
+  "genus",
+  "family",
+  "flowering",
+  "botanical",
+  "botany",
+  "leaf",
+  "leaves",
+  "petal",
+  "root",
+  "stem",
+  "bark",
+  "fruit",
+  "seed",
+  "perennial",
+  "annual",
+  "evergreen",
+  "deciduous",
+  "native",
+  "cultivar",
+  "succulent",
+  "cactus",
+  "vine",
+  "foliage",
+  "bloom",
+  "blossom",
+  "flora",
+  "tropical",
+  "aquatic",
+  "garden",
+  "weed",
+  "crop",
+  "vegetation",
+  "plantae",
+  "magnoliopsida",
+  "monocot",
+  "dicot",
+  "angiosperm",
+  "gymnosperm",
+];
+
+// Keywords that strongly suggest the result is NOT a plant
+const NON_PLANT_KEYWORDS = [
+  "band",
+  "musician",
+  "singer",
+  "album",
+  "film",
+  "movie",
+  "actor",
+  "politician",
+  "athlete",
+  "football",
+  "basketball",
+  "soccer",
+  "sport",
+  "company",
+  "corporation",
+  "software",
+  "game",
+  "video game",
+  "character",
+  "novel",
+  "book",
+  "author",
+  "tv show",
+  "television",
+  "anime",
+  "manga",
+  "city",
+  "country",
+  "district",
+  "province",
+  "island",
+  "ocean",
+  "river",
+  "war",
+  "battle",
+  "military",
+  "weapon",
+  "drug",
+  "chemical",
+];
+
+function isLikelyPlant(result: SearchResult): boolean {
+  const text = (result.title + " " + stripHtml(result.snippet)).toLowerCase();
+
+  // Reject if any strong non-plant keyword is found
+  if (NON_PLANT_KEYWORDS.some((kw) => text.includes(kw))) return false;
+
+  // Accept if any plant keyword is found
+  return PLANT_SNIPPET_KEYWORDS.some((kw) => text.includes(kw));
+}
+
+async function searchPlants(query: string): Promise<SearchResult[]> {
+  // Search with "plant" AND category scoping using insource to get more relevant results
+  const params = new URLSearchParams({
+    action: "query",
+    list: "search",
+    // Force Wikipedia to look in plant-related categories by adding botanical terms
+    srsearch: `${query} (plant OR flower OR tree OR herb OR species OR genus)`,
+    srlimit: "20", // fetch more so filtering still leaves enough results
+    srprop: "snippet|titlesnippet|categorysnippet",
+    srnamespace: "0",
+    format: "json",
+    origin: "*",
+  });
+
+  const res = await fetch(`${WP_BASE}?${params}`);
+  const json = await res.json();
+  const raw: SearchResult[] = json.query?.search ?? [];
+
+  // Filter to only results that look like plants, cap at 10
+  return raw.filter(isLikelyPlant).slice(0, 10);
+}
+
+function parseInfobox(wikitext: string): InfoBox {
+  const box: InfoBox = {};
+
+  const fieldMap: Record<string, keyof InfoBox> = {
+    regnum: "kingdom",
+    reino: "kingdom",
+    kingdom: "kingdom",
+    species: "species",
+    genus: "genus",
+    familia: "family",
+    family: "family",
+    ordo: "order",
+    order: "order",
+    classis: "class",
+    class: "class",
+    phylum: "phylum",
+    divisio: "phylum",
+    origin: "origin",
+    native_range: "origin",
+    range: "origin",
+    climate: "climate",
+    growth_habit: "type",
+    habit: "type",
+    type: "type",
+    habitat: "habitat",
+    height: "height",
+    plant_range: "height",
+    lifespan: "lifespan",
+    life_span: "lifespan",
+    bloom_time: "bloom",
+    blooming: "bloom",
+    flowering: "bloom",
+    toxicity: "toxicity",
+    toxic: "toxicity",
+  };
+
+  const lines = wikitext.split("\n");
+  for (const line of lines) {
+    const match = line.match(/\|\s*([a-zA-Z_]+)\s*=\s*(.+)/);
+    if (!match) continue;
+    const key = match[1].trim().toLowerCase();
+    const value = match[2]
+      .replace(/\[\[([^\]|]+)\|?[^\]]*\]\]/g, "$1")
+      .replace(/\{\{[^}]+\}\}/g, "")
+      .replace(/<[^>]+>/g, "")
+      .replace(/'{2,}/g, "")
+      .trim();
+    if (!value) continue;
+    const mapped = fieldMap[key];
+    if (mapped && !box[mapped]) box[mapped] = value;
+  }
+
+  return box;
+}
+
+async function getPlantDetail(title: string): Promise<PlantDetail | null> {
+  const encoded = encodeURIComponent(title.replace(/ /g, "_"));
+  const [summaryRes, wikitextRes] = await Promise.all([
+    fetch(`${WP_REST}${encoded}`),
+    fetch(
+      `${WP_BASE}?${new URLSearchParams({
+        action: "query",
+        titles: title,
+        prop: "revisions",
+        rvprop: "content",
+        rvslots: "main",
+        format: "json",
+        origin: "*",
+        rvsection: "0",
+      })}`,
+    ),
+  ]);
+
+  const summary = summaryRes.ok ? await summaryRes.json() : null;
+  const wikitextJson = await wikitextRes.json();
+  const pages = wikitextJson?.query?.pages ?? {};
+  const page = Object.values(pages)[0] as any;
+  const wikitext = page?.revisions?.[0]?.slots?.main?.["*"] ?? "";
+  const infobox = parseInfobox(wikitext);
+
+  return {
+    title: summary?.title ?? title,
+    extract: summary?.extract ?? "No description available.",
+    thumbnail: summary?.thumbnail,
+    infobox,
+  };
+}
+
+function stripHtml(html: string) {
+  return html
+    .replace(/<[^>]*>/g, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"');
+}
+
+function matchesFilter(result: SearchResult, filter: string): boolean {
+  if (filter === "all") return true;
+  const keywords = FILTER_KEYWORDS[filter] ?? [];
+  const text = (result.title + " " + stripHtml(result.snippet)).toLowerCase();
+  return keywords.some((kw) => text.includes(kw));
+}
+
+// ─── InfoBox Row ──────────────────────────────────────────────────────────────
+function InfoRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: string;
+  label: string;
+  value?: string;
+}) {
+  if (!value) return null;
+  return (
+    <View style={infoStyles.row}>
+      <View style={infoStyles.iconBox}>
+        <Text style={infoStyles.icon}>{icon}</Text>
+      </View>
+      <View style={infoStyles.textBox}>
+        <Text style={infoStyles.label}>{label}</Text>
+        <Text style={infoStyles.value}>{value}</Text>
+      </View>
+    </View>
+  );
+}
+
+const infoStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 12,
+    gap: 10,
+  },
+  iconBox: {
+    width: 38,
+    height: 38,
+    backgroundColor: "#EAF4E5",
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  icon: { fontSize: 18 },
+  textBox: { flex: 1 },
+  label: {
+    fontSize: 11,
+    color: "#6B8F71",
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+    marginBottom: 2,
+  },
+  value: { fontSize: 14, color: "#1E3A2F", fontWeight: "500", lineHeight: 20 },
+});
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+export default function PlantWikiScreen() {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [detail, setDetail] = useState<PlantDetail | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [searched, setSearched] = useState(false);
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [activeTab, setActiveTab] = useState<
+    "overview" | "taxonomy" | "details"
+  >("overview");
+
+  const handleSearch = useCallback(async () => {
+    if (!query.trim()) return;
+    setSearching(true);
+    setSearched(true);
+    setResults([]);
+    setActiveFilter("all");
+    try {
+      const data = await searchPlants(query.trim());
+      setResults(data);
+    } catch {
+      setResults([]);
+    } finally {
+      setSearching(false);
+    }
+  }, [query]);
+
+  const handleSelectPlant = useCallback(async (title: string) => {
+    setLoadingDetail(true);
+    setModalVisible(true);
+    setDetail(null);
+    setActiveTab("overview");
+    try {
+      const data = await getPlantDetail(title);
+      setDetail(data);
+    } catch {
+      setDetail(null);
+    } finally {
+      setLoadingDetail(false);
+    }
+  }, []);
+
+  const closeModal = () => {
+    setModalVisible(false);
+    setDetail(null);
+  };
+
+  const filteredResults = results.filter((r) => matchesFilter(r, activeFilter));
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F4F7F0" />
+
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerEmoji}>🌿</Text>
+        <Text style={styles.headerTitle}>Plant Wiki</Text>
+        <Text style={styles.headerSub}>Search any plant for detailed info</Text>
+      </View>
+
+      {/* Search */}
+      <View style={styles.searchRow}>
+        <TextInput
+          style={styles.searchInput}
+          value={query}
+          onChangeText={setQuery}
+          placeholder="e.g. Monstera, Lavender, Rose…"
+          placeholderTextColor="#9CAF88"
+          onSubmitEditing={handleSearch}
+          returnKeyType="search"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        <TouchableOpacity
+          style={styles.searchBtn}
+          onPress={handleSearch}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.searchBtnText}>Search</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Filter chips */}
+      {(results.length > 0 || searched) && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterScroll}
+          contentContainerStyle={styles.filterContent}
+        >
+          {FILTERS.map((f) => (
+            <TouchableOpacity
+              key={f.id}
+              style={[
+                styles.filterChip,
+                activeFilter === f.id && styles.filterChipActive,
+              ]}
+              onPress={() => setActiveFilter(f.id)}
+              activeOpacity={0.75}
+            >
+              <Text
+                style={[
+                  styles.filterChipText,
+                  activeFilter === f.id && styles.filterChipTextActive,
+                ]}
+              >
+                {f.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+
+      {/* Results list */}
+      {searching ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#4A7C59" />
+          <Text style={styles.loadingText}>Looking up plants…</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredResults}
+          keyExtractor={(item) => String(item.pageid)}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            results.length > 0 ? (
+              <Text style={styles.resultsLabel}>
+                {filteredResults.length} result
+                {filteredResults.length !== 1 ? "s" : ""}
+                {activeFilter !== "all"
+                  ? ` · ${FILTERS.find((f) => f.id === activeFilter)?.label}`
+                  : ` for "${query}"`}
+              </Text>
+            ) : null
+          }
+          ListEmptyComponent={
+            !searched ? (
+              <View style={styles.centered}>
+                <Text style={styles.placeholderEmoji}>🌱</Text>
+                <Text style={styles.placeholderText}>
+                  Search a plant to get started
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.centered}>
+                <Text style={styles.emptyEmoji}>🌾</Text>
+                <Text style={styles.emptyText}>
+                  {activeFilter !== "all"
+                    ? "No results for this filter."
+                    : "No plant found."}
+                </Text>
+                <Text style={styles.emptyHint}>
+                  {activeFilter !== "all"
+                    ? 'Try "All" or a different filter.'
+                    : 'Only plant names are supported.\nTry "Rose", "Monstera", or "Basil".'}
+                </Text>
+              </View>
+            )
+          }
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.resultCard}
+              onPress={() => handleSelectPlant(item.title)}
+              activeOpacity={0.75}
+            >
+              <View style={styles.cardLeft}>
+                <Text style={styles.cardLeaf}>🌿</Text>
+              </View>
+              <View style={styles.cardRight}>
+                <Text style={styles.cardTitle}>{item.title}</Text>
+                <Text style={styles.cardSnippet} numberOfLines={2}>
+                  {stripHtml(item.snippet)}
+                </Text>
+              </View>
+              <Text style={styles.cardArrow}>›</Text>
+            </TouchableOpacity>
+          )}
+        />
+      )}
+
+      {/* Detail Modal */}
+      <Modal
+        visible={modalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={closeModal}
+      >
+        <SafeAreaView style={styles.modalSafe}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={closeModal} style={styles.closeBtn}>
+              <Text style={styles.closeBtnText}>✕ Close</Text>
+            </TouchableOpacity>
+            {detail && (
+              <Text style={styles.modalHeaderTitle} numberOfLines={1}>
+                {detail.title}
+              </Text>
+            )}
+          </View>
+
+          {loadingDetail ? (
+            <View style={styles.centered}>
+              <ActivityIndicator size="large" color="#4A7C59" />
+              <Text style={styles.loadingText}>Loading plant info…</Text>
+            </View>
+          ) : detail ? (
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Hero image or fallback */}
+              {detail.thumbnail?.source ? (
+                <View style={styles.imageWrapper}>
+                  <Image
+                    source={{ uri: detail.thumbnail.source }}
+                    style={styles.plantImage}
+                    resizeMode="cover"
+                  />
+                  <View style={styles.imageOverlay} />
+                  <View style={styles.imageTitleBox}>
+                    <Text style={styles.imageTitleText}>🌿 {detail.title}</Text>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.noImageBox}>
+                  <Text style={styles.noImageEmoji}>🌿</Text>
+                  <Text style={styles.noImageTitle}>{detail.title}</Text>
+                </View>
+              )}
+
+              {/* Tab bar */}
+              <View style={styles.tabRow}>
+                {(["overview", "taxonomy", "details"] as const).map((tab) => (
+                  <TouchableOpacity
+                    key={tab}
+                    style={[
+                      styles.tabBtn,
+                      activeTab === tab && styles.tabBtnActive,
+                    ]}
+                    onPress={() => setActiveTab(tab)}
+                  >
+                    <Text
+                      style={[
+                        styles.tabBtnText,
+                        activeTab === tab && styles.tabBtnTextActive,
+                      ]}
+                    >
+                      {tab === "overview"
+                        ? "📋 Overview"
+                        : tab === "taxonomy"
+                          ? "🔬 Taxonomy"
+                          : "📊 Details"}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={styles.modalBody}>
+                {/* OVERVIEW */}
+                {activeTab === "overview" && (
+                  <>
+                    {/* Quick pills */}
+                    {(detail.infobox.type ||
+                      detail.infobox.origin ||
+                      detail.infobox.bloom ||
+                      detail.infobox.toxicity) && (
+                      <View style={styles.pillRow}>
+                        {detail.infobox.type && (
+                          <View style={styles.pill}>
+                            <Text style={styles.pillText}>
+                              🌱 {detail.infobox.type}
+                            </Text>
+                          </View>
+                        )}
+                        {detail.infobox.origin && (
+                          <View style={styles.pill}>
+                            <Text style={styles.pillText}>
+                              📍 {detail.infobox.origin.split(",")[0]}
+                            </Text>
+                          </View>
+                        )}
+                        {detail.infobox.bloom && (
+                          <View style={styles.pill}>
+                            <Text style={styles.pillText}>
+                              🌸 {detail.infobox.bloom}
+                            </Text>
+                          </View>
+                        )}
+                        {detail.infobox.toxicity && (
+                          <View style={[styles.pill, styles.pillDanger]}>
+                            <Text
+                              style={[styles.pillText, styles.pillTextDanger]}
+                            >
+                              ⚠️ {detail.infobox.toxicity}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    )}
+                    <View style={styles.sectionHeader}>
+                      <Text style={styles.sectionTitle}>About</Text>
+                    </View>
+                    <Text style={styles.extract}>{detail.extract}</Text>
+                  </>
+                )}
+
+                {/* TAXONOMY */}
+                {activeTab === "taxonomy" && (
+                  <>
+                    <View style={styles.sectionHeader}>
+                      <Text style={styles.sectionTitle}>
+                        Scientific Classification
+                      </Text>
+                    </View>
+                    <View style={styles.infoCard}>
+                      <InfoRow
+                        icon="👑"
+                        label="Kingdom"
+                        value={detail.infobox.kingdom}
+                      />
+                      <InfoRow
+                        icon="🧬"
+                        label="Phylum / Division"
+                        value={detail.infobox.phylum}
+                      />
+                      <InfoRow
+                        icon="🔬"
+                        label="Class"
+                        value={detail.infobox.class}
+                      />
+                      <InfoRow
+                        icon="📦"
+                        label="Order"
+                        value={detail.infobox.order}
+                      />
+                      <InfoRow
+                        icon="🌿"
+                        label="Family"
+                        value={detail.infobox.family}
+                      />
+                      <InfoRow
+                        icon="🧪"
+                        label="Genus"
+                        value={detail.infobox.genus}
+                      />
+                      <InfoRow
+                        icon="🔖"
+                        label="Species"
+                        value={detail.infobox.species}
+                      />
+                    </View>
+                    {!detail.infobox.kingdom &&
+                      !detail.infobox.family &&
+                      !detail.infobox.genus && (
+                        <View style={styles.noDataBox}>
+                          <Text style={styles.noDataEmoji}>🔬</Text>
+                          <Text style={styles.noDataText}>
+                            Taxonomy data not available in Wikipedia for this
+                            entry.
+                          </Text>
+                        </View>
+                      )}
+                  </>
+                )}
+
+                {/* DETAILS */}
+                {activeTab === "details" && (
+                  <>
+                    <View style={styles.sectionHeader}>
+                      <Text style={styles.sectionTitle}>
+                        Plant Characteristics
+                      </Text>
+                    </View>
+                    <View style={styles.infoCard}>
+                      <InfoRow
+                        icon="🌍"
+                        label="Origin / Native Range"
+                        value={detail.infobox.origin}
+                      />
+                      <InfoRow
+                        icon="☀️"
+                        label="Climate"
+                        value={detail.infobox.climate}
+                      />
+                      <InfoRow
+                        icon="🌱"
+                        label="Plant Type / Habit"
+                        value={detail.infobox.type}
+                      />
+                      <InfoRow
+                        icon="🏕️"
+                        label="Habitat"
+                        value={detail.infobox.habitat}
+                      />
+                      <InfoRow
+                        icon="📏"
+                        label="Height"
+                        value={detail.infobox.height}
+                      />
+                      <InfoRow
+                        icon="⏳"
+                        label="Lifespan"
+                        value={detail.infobox.lifespan}
+                      />
+                      <InfoRow
+                        icon="🌸"
+                        label="Bloom / Flowering"
+                        value={detail.infobox.bloom}
+                      />
+                      <InfoRow
+                        icon="⚠️"
+                        label="Toxicity"
+                        value={detail.infobox.toxicity}
+                      />
+                    </View>
+                    {!detail.infobox.origin &&
+                      !detail.infobox.climate &&
+                      !detail.infobox.type && (
+                        <View style={styles.noDataBox}>
+                          <Text style={styles.noDataEmoji}>📊</Text>
+                          <Text style={styles.noDataText}>
+                            Characteristic data not available in Wikipedia for
+                            this entry.
+                          </Text>
+                        </View>
+                      )}
+                  </>
+                )}
+
+                <View style={styles.sourceBox}>
+                  <Text style={styles.sourceText}>
+                    📖 Source: Wikipedia — Data may vary by species.
+                  </Text>
+                </View>
+              </View>
+            </ScrollView>
+          ) : (
+            <View style={styles.centered}>
+              <Text style={styles.emptyEmoji}>😕</Text>
+              <Text style={styles.emptyText}>
+                Could not load plant details.
+              </Text>
+            </View>
+          )}
+        </SafeAreaView>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: "#F4F7F0" },
+
+  header: {
+    alignItems: "center",
+    paddingTop: Platform.OS === "android" ? 20 : 10,
+    paddingBottom: 14,
+  },
+  headerEmoji: { fontSize: 36, marginBottom: 4 },
+  headerTitle: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: "#1E3A2F",
+    letterSpacing: 0.5,
+  },
+  headerSub: { fontSize: 13, color: "#6B8F71", marginTop: 2 },
+
+  searchRow: {
+    flexDirection: "row",
+    marginHorizontal: 16,
+    marginBottom: 10,
+    gap: 10,
+  },
+  searchInput: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: Platform.OS === "android" ? 10 : 13,
+    fontSize: 15,
+    color: "#1E3A2F",
+    borderWidth: 1.5,
+    borderColor: "#C8DFC1",
+    shadowColor: "#4A7C59",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  searchBtn: {
+    backgroundColor: "#4A7C59",
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    justifyContent: "center",
+    shadowColor: "#4A7C59",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  searchBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+
+  filterScroll: { maxHeight: 46, marginBottom: 10 },
+  filterContent: { paddingHorizontal: 16, gap: 8, alignItems: "center" },
+  filterChip: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderWidth: 1.5,
+    borderColor: "#C8DFC1",
+  },
+  filterChipActive: { backgroundColor: "#4A7C59", borderColor: "#4A7C59" },
+  filterChipText: { fontSize: 13, color: "#4A7C59", fontWeight: "600" },
+  filterChipTextActive: { color: "#fff" },
+
+  list: { paddingHorizontal: 16, paddingBottom: 30 },
+  resultsLabel: {
+    fontSize: 12,
+    color: "#6B8F71",
+    marginBottom: 10,
+    marginLeft: 2,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  resultCard: {
+    flexDirection: "row",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    marginBottom: 10,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E0EDD9",
+    shadowColor: "#2D5A3D",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
+    elevation: 2,
+    alignItems: "center",
+    gap: 12,
+  },
+  cardLeft: {
+    width: 42,
+    height: 42,
+    backgroundColor: "#EAF4E5",
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cardLeaf: { fontSize: 22 },
+  cardRight: { flex: 1 },
+  cardTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1E3A2F",
+    marginBottom: 3,
+  },
+  cardSnippet: { fontSize: 12.5, color: "#6B8F71", lineHeight: 18 },
+  cardArrow: { fontSize: 22, color: "#C8DFC1" },
+
+  centered: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingBottom: 60,
+  },
+  loadingText: { marginTop: 12, color: "#6B8F71", fontSize: 14 },
+  emptyEmoji: { fontSize: 48, marginBottom: 12 },
+  emptyText: { fontSize: 16, fontWeight: "600", color: "#1E3A2F" },
+  emptyHint: { fontSize: 13, color: "#9CAF88", marginTop: 4 },
+  placeholderEmoji: { fontSize: 64, marginBottom: 16 },
+  placeholderText: { fontSize: 15, color: "#9CAF88", fontWeight: "500" },
+
+  modalSafe: { flex: 1, backgroundColor: "#F4F7F0" },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E0EDD9",
+    gap: 12,
+  },
+  modalHeaderTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1E3A2F",
+  },
+  closeBtn: {
+    backgroundColor: "#EAF4E5",
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  closeBtnText: { color: "#4A7C59", fontWeight: "700", fontSize: 14 },
+
+  imageWrapper: { position: "relative", height: 220 },
+  plantImage: { width: "100%", height: 220 },
+  imageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(20,46,30,0.35)",
+  },
+  imageTitleBox: { position: "absolute", bottom: 14, left: 16, right: 16 },
+  imageTitleText: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "800",
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  noImageBox: {
+    backgroundColor: "#EAF4E5",
+    alignItems: "center",
+    paddingVertical: 30,
+    gap: 8,
+  },
+  noImageEmoji: { fontSize: 52 },
+  noImageTitle: { fontSize: 22, fontWeight: "800", color: "#1E3A2F" },
+
+  tabRow: {
+    flexDirection: "row",
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 4,
+    backgroundColor: "#E8F5E1",
+    borderRadius: 14,
+    padding: 4,
+  },
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  tabBtnActive: { backgroundColor: "#4A7C59" },
+  tabBtnText: { fontSize: 12, fontWeight: "600", color: "#4A7C59" },
+  tabBtnTextActive: { color: "#fff" },
+
+  modalBody: { paddingHorizontal: 16, paddingBottom: 40 },
+  sectionHeader: { marginTop: 16, marginBottom: 10 },
+  sectionTitle: { fontSize: 16, fontWeight: "800", color: "#1E3A2F" },
+
+  pillRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  pill: {
+    backgroundColor: "#EAF4E5",
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: "#C8DFC1",
+  },
+  pillDanger: { backgroundColor: "#FFF3E0", borderColor: "#FFCC80" },
+  pillText: { fontSize: 12, color: "#4A7C59", fontWeight: "600" },
+  pillTextDanger: { color: "#E65100" },
+
+  extract: { fontSize: 14.5, color: "#2D4A38", lineHeight: 23 },
+
+  infoCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#E0EDD9",
+    shadowColor: "#2D5A3D",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+
+  noDataBox: { alignItems: "center", paddingVertical: 30, gap: 10 },
+  noDataEmoji: { fontSize: 40 },
+  noDataText: {
+    fontSize: 13,
+    color: "#9CAF88",
+    textAlign: "center",
+    lineHeight: 20,
+    maxWidth: "80%",
+  },
+
+  sourceBox: {
+    marginTop: 20,
+    backgroundColor: "#E8F5E1",
+    borderRadius: 10,
+    padding: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: "#4A7C59",
+  },
+  sourceText: { fontSize: 12, color: "#4A7C59", fontWeight: "600" },
+});

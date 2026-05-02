@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
-import { View, Text, TextInput, Pressable, StyleSheet } from "react-native";
-import { useState } from "react";
 import { sendPasswordResetEmail } from "firebase/auth";
+import { useState } from "react";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { auth } from "./firebaseConfig"; // make sure this points to your config file
 
 export default function ForgotPasswordScreen() {
@@ -36,6 +36,7 @@ export default function ForgotPasswordScreen() {
         style={styles.input}
         keyboardType="email-address"
         autoCapitalize="none"
+        placeholderTextColor="#666"
       />
 
       <Pressable onPress={handleReset} style={styles.button}>

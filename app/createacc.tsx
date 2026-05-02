@@ -1,9 +1,9 @@
 import { useRouter } from "expo-router";
-import { View, Text, TextInput, Pressable, StyleSheet } from "react-native";
-import { useState, useContext } from "react";
-import { UserContext } from "./UserContext";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { useContext, useState } from "react";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { auth } from "./firebaseConfig";
+import { UserContext } from "./UserContext";
 
 export default function SignupScreen() {
   const router = useRouter();
@@ -23,7 +23,11 @@ export default function SignupScreen() {
       return;
     }
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password,
+      );
       const user = userCredential.user;
 
       // Optionally set displayName
@@ -47,12 +51,14 @@ export default function SignupScreen() {
         style={styles.input}
         autoCapitalize="none"
         keyboardType="email-address"
+        placeholderTextColor="#666"
       />
       <TextInput
         placeholder="Username"
         value={username}
         onChangeText={setUsername}
         style={styles.input}
+        placeholderTextColor="#666"
       />
       <TextInput
         placeholder="Password"
@@ -60,6 +66,7 @@ export default function SignupScreen() {
         onChangeText={setPassword}
         secureTextEntry
         style={styles.input}
+        placeholderTextColor="#666"
       />
       <TextInput
         placeholder="Repeat Password"
@@ -67,13 +74,17 @@ export default function SignupScreen() {
         onChangeText={setRepeatPassword}
         secureTextEntry
         style={styles.input}
+        placeholderTextColor="#666"
       />
 
       <Pressable onPress={handleSignup} style={styles.button}>
         <Text style={styles.buttonText}>Sign Up</Text>
       </Pressable>
 
-      <Pressable onPress={() => router.back()} style={[styles.button, styles.backButton]}>
+      <Pressable
+        onPress={() => router.back()}
+        style={[styles.button, styles.backButton]}
+      >
         <Text style={styles.buttonText}>Go Back</Text>
       </Pressable>
     </View>
@@ -81,10 +92,32 @@ export default function SignupScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#378837" },
+  container: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#378837",
+  },
   title: { fontSize: 24, color: "#fff", fontWeight: "bold", marginBottom: 20 },
-  input: { width: 250, height: 40, backgroundColor: "white", marginBottom: 15, borderRadius: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: "#ccc" },
-  button: { width: 250, height: 45, backgroundColor: "#266e26", justifyContent: "center", alignItems: "center", borderRadius: 8, marginTop: 10 },
+  input: {
+    width: 250,
+    height: 40,
+    backgroundColor: "white",
+    marginBottom: 15,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: "#ccc",
+  },
+  button: {
+    width: 250,
+    height: 45,
+    backgroundColor: "#266e26",
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 8,
+    marginTop: 10,
+  },
   backButton: { backgroundColor: "#266e26" },
   buttonText: { color: "white", fontWeight: "bold" },
 });
